@@ -484,6 +484,7 @@ document.addEventListener('click',function(e){let el=e.target;for(let k=0;k<5&&e
    let el=e.target;
    for(let i=0;i<5 && el;i++,el=el.parentElement){
      const t=(el.innerText||'').trim().replace(/\s+/g,' ');
+     if(el.closest && el.closest('.hb-reviewer-section, #hbReviewerProfile')) continue;
      if(t==='Canlı Fal' || t.includes('Canlı Fal')){e.preventDefault();e.stopPropagation();open();return}
    }
  },true);
