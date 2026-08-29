@@ -1378,4 +1378,143 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+
+<style id="hb-pool-system-style">
+#hbPoolToast{
+ position:fixed;left:50%;bottom:105px;transform:translateX(-50%) translateY(20px);
+ background:#1f6b50;color:#fff;padding:13px 18px;border-radius:16px;
+ font-weight:800;z-index:9999999;opacity:0;pointer-events:none;
+ transition:.25s;box-shadow:0 10px 30px rgba(0,0,0,.2);text-align:center;
+}
+#hbPoolToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+
+<div id="hbPoolToast">✓ Falın yorumcu havuzuna gönderildi</div>
+
+<script id="hb-pool-system">
+(function(){
+  function toast(msg){
+    const t=document.getElementById('hbPoolToast');
+    if(!t) return;
+    t.textContent=msg;
+    t.classList.add('show');
+    clearTimeout(window.__hbPoolToastTimer);
+    window.__hbPoolToastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+  }
+
+  function currentFortuneName(){
+    return (document.getElementById('hbFortuneTitle')?.textContent || '').trim();
+  }
+
+  function getFormData(){
+    const modal=document.getElementById('hbFortuneModal');
+    const fortune=currentFortuneName();
+    const inputs=[...modal.querySelectorAll('input,select,textarea')];
+
+    const valueOf=(placeholder)=>inputs.find(x=>x.placeholder===placeholder)?.value || '';
+    const selects=[...modal.querySelectorAll('select')];
+
+    const selectedCards=(window.selected || []);
+    const cardCount=document.querySelectorAll('#hbSlots .hbSlotCard').length;
+
+    const photos=[...modal.querySelectorAll('#hbPreview img')].map(x=>x.src);
+
+    return {
+      id:'fal_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+      fortune_type:fortune,
+      status:'waiting',
+      pool_status:'open',
+      price:400,
+      question:document.getElementById('hbQuestion')?.value || '',
+      birth_date:document.getElementById('hbBirthDate')?.value || '',
+      relationship_status:selects.find(x=>x.innerText.includes('Bekar'))?.value || '',
+      age:valueOf('Yaş'),
+      city:valueOf('Şehir'),
+      photos:photos,
+      selected_card_count:cardCount,
+      created_at:new Date().toISOString()
+    };
+  }
+
+  async function sendToSupabase(request){
+    try{
+      const sb=window.supabaseClient || window.supabase || window.sb;
+      if(!sb || typeof sb.from!=='function') return false;
+      const result=await sb.from('reading_requests').insert([request]);
+      if(result && result.error){
+        console.warn('Supabase havuz kaydı:',result.error);
+        return false;
+      }
+      return true;
+    }catch(e){
+      console.warn('Supabase havuz bağlantısı kullanılamadı:',e);
+      return false;
+    }
+  }
+
+  async function addToPool(){
+    const request=getFormData();
+    if(!request.fortune_type) return;
+
+    // Tüm fal türlerinin standart ücreti
+    request.price=400;
+
+    // Önce yerel havuza kaydet: Supabase kapalı olsa bile sistem çalışır.
+    let pool=[];
+    try{ pool=JSON.parse(localStorage.getItem('habibi_fal_havuzu')||'[]'); }catch(e){}
+    pool.unshift(request);
+    localStorage.setItem('habibi_fal_havuzu',JSON.stringify(pool));
+
+    // Kullanıcının fallarım listesine de ekle.
+    let mine=[];
+    try{ mine=JSON.parse(localStorage.getItem('habibi_fallarim')||'[]'); }catch(e){}
+    mine.unshift(request);
+    localStorage.setItem('habibi_fallarim',JSON.stringify(mine));
+
+    await sendToSupabase(request);
+
+    toast('✓ '+request.fortune_type+' yorumcu havuzuna gönderildi');
+    if(typeof window.hbCloseFortune==='function'){
+      setTimeout(window.hbCloseFortune,900);
+    }
+  }
+
+  // Fal gönder butonunu her açılışta havuz sistemine bağla.
+  document.addEventListener('click',function(e){
+    const btn=e.target.closest('#hbFortuneSend');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Kart fallarında 7 kart seçilmeden gönderilmesin.
+    const fortune=currentFortuneName();
+    if((fortune==='Tarot Falı' || fortune==='Katina Falı')){
+      const count=document.querySelectorAll('#hbSlots .hbSlotCard').length;
+      if(count!==7){
+        toast('Önce 7 kart seçmelisin.');
+        return;
+      }
+    }
+
+    // Fotoğraf zorunlu olan fallarda fotoğraf kontrolü.
+    const photoRequired=['Kahve Falı','El Falı','Yüz Falı','İlişki Danışmanı'];
+    if(photoRequired.includes(fortune)){
+      const count=document.querySelectorAll('#hbPreview img').length;
+      if(count<1){
+        toast('Önce gerekli fotoğrafı eklemelisin.');
+        return;
+      }
+    }
+
+    addToPool();
+  },true);
+
+  // Diğer sayfaların/yorumcu ekranlarının havuzu okuyabilmesi için global fonksiyon.
+  window.hbGetFortunePool=function(){
+    try{return JSON.parse(localStorage.getItem('habibi_fal_havuzu')||'[]');}
+    catch(e){return [];}
+  };
+})();
+</script>
+
 </body></html>
