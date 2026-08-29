@@ -2117,13 +2117,86 @@ window.addEventListener('load',()=>setTimeout(bindLowerReaders,150));
 <div id="hbReaderPicker"><div class="hbPickerSheet"><div class="hbPickerHead"><div></div><button class="hbPickerClose">×</button></div><h2 class="hbPickerTitle">Yorumcu Seç</h2><p class="hbPickerSub">Seçtiğiniz fal türü için bir yorumcu ve yorum şeklini seçin</p><div class="hbReaderGrid" id="hbReaderGrid"></div></div></div>
 <script id="hb-reader-picker-final">
 (function(){
- const picker=document.getElementById('hbReaderPicker'), grid=document.getElementById('hbReaderGrid'); let currentFortune='';
- function readers(){let arr=[];document.querySelectorAll('.hb-card,.reader').forEach(c=>{let name=(c.querySelector('.hb-name,.name')||{}).textContent||'';let img=(c.querySelector('img')||{}).src||'';if(name&&!arr.some(x=>x.name===name))arr.push({name:name.trim(),img})}); if(!arr.length) arr=['Aras','Deniz','Kerem','Murat','Yusuf Hoca'].map(name=>({name,img:''})); return arr;}
- function openPicker(fortune){currentFortune=fortune;grid.innerHTML=readers().map(r=>`<div class="hbReaderPick"><img src="${r.img}" onerror="this.style.display='none'"><strong>${r.name}</strong><div class="hbModes"><button data-reader="${r.name}" data-mode="Yazılı Yorum">✍️ YAZILI YORUM • 300 KREDİ</button><button class="voice" data-reader="${r.name}" data-mode="Sesli Yorum">🎙️ SESLİ YORUM • 300 KREDİ</button></div></div>`).join('');picker.classList.add('show');}
- function choose(reader,mode){picker.classList.remove('show'); if(typeof window.hbOpenFortune==='function') window.hbOpenFortune(currentFortune); setTimeout(()=>{let send=document.getElementById('hbFortuneSend'); if(send) send.textContent=reader+' • '+mode+' • 300 KREDİ';},120);}
- grid.addEventListener('click',e=>{let b=e.target.closest('button[data-reader]');if(b)choose(b.dataset.reader,b.dataset.mode)});picker.querySelector('.hbPickerClose').onclick=()=>picker.classList.remove('show');
- document.addEventListener('click',function(e){let t=e.target.closest&&e.target.closest('.types .type');if(!t)return;e.preventDefault();e.stopImmediatePropagation();let n=(t.querySelector('span:last-child')?.textContent||t.textContent).trim();openPicker(n);},true);
- window.hbOpenReaderPicker=openPicker;
+  const picker=document.getElementById('hbReaderPicker');
+  const grid=document.getElementById('hbReaderGrid');
+  let currentFortune='';
+  let selectedReader='';
+  let selectedMode='';
+
+  // Uygulamadaki yorumcular: seçilen fal türünden bağımsız olarak hepsi görünür.
+  const ALL_READERS=[
+    'Ayşe Demir','Cansu Kaya','Derya Öz','Meryem Hanım','Aras Bey',
+    'Asel Hanım','Yusuf Hoca','Selin Hanım','Murat Bey','Nehir Hanım',
+    'Kerem','Lale Hanım','Mira','Zehra Ana','Deniz'
+  ];
+
+  function getReaders(){
+    const found=[];
+    document.querySelectorAll('.hb-card,.reader,.hb-expert-card').forEach(card=>{
+      const n=card.querySelector('.hb-name,.name,strong,h3,h2');
+      const img=card.querySelector('img');
+      const name=n&&n.textContent?n.textContent.trim():'';
+      if(name && name.length<40 && !found.some(x=>x.name===name)) found.push({name,img:img?img.src:''});
+    });
+    ALL_READERS.forEach((name,i)=>{
+      if(!found.some(x=>x.name===name)) found.push({name,img:`https://i.pravatar.cc/300?img=${(i%60)+1}`});
+    });
+    return found;
+  }
+
+  function openPicker(fortune){
+    currentFortune=fortune;
+    const list=getReaders();
+    grid.innerHTML=list.map((r,i)=>`
+      <div class="hbReaderPick">
+        <img src="${r.img}" alt="${r.name}" onerror="this.src='https://i.pravatar.cc/300?img=${(i%60)+1}'">
+        <strong>${r.name}</strong>
+        <div style="font-size:11px;color:#756c61;margin:3px 0 9px">${fortune} yorumlayabilir</div>
+        <div class="hbModes">
+          <button data-reader="${r.name}" data-mode="Yazılı Yorum">✍️ YAZILI YORUM • 300 KREDİ</button>
+          <button class="voice" data-reader="${r.name}" data-mode="Sesli Yorum">🎙️ SESLİ YORUM • 300 KREDİ</button>
+        </div>
+      </div>`).join('');
+    picker.classList.add('show');
+  }
+
+  function choose(reader,mode){
+    selectedReader=reader; selectedMode=mode;
+    picker.classList.remove('show');
+    window.hbSelectedReader=reader;
+    window.hbSelectedRequestMode=mode;
+    if(typeof window.hbOpenFortune==='function') window.hbOpenFortune(currentFortune);
+    else if(typeof window.openFortune==='function') window.openFortune(currentFortune);
+    setTimeout(()=>{
+      const send=document.getElementById('hbFortuneSend') || document.querySelector('.hbSend');
+      if(send){
+        send.textContent=`YORUM GÖNDER • 300 KREDİ`;
+        send.dataset.reader=selectedReader;
+        send.dataset.mode=selectedMode;
+      }
+      const title=document.querySelector('#hbFortuneModal .hbFortuneTitle');
+      if(title) title.textContent=`${currentFortune} • ${selectedReader}`;
+    },150);
+  }
+
+  grid.addEventListener('click',e=>{
+    const b=e.target.closest('button[data-reader]');
+    if(b) choose(b.dataset.reader,b.dataset.mode);
+  });
+  picker.querySelector('.hbPickerClose').onclick=()=>picker.classList.remove('show');
+
+  // Fal türüne basınca SADECE yorumcu seçim penceresi açılır.
+  document.addEventListener('click',function(e){
+    const t=e.target.closest&&e.target.closest('.types .type');
+    if(!t)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const label=t.querySelector('span:last-child');
+    const n=(label?label.textContent:t.textContent).replace(/\s+/g,' ').trim();
+    openPicker(n);
+  },true);
+
+  window.hbOpenReaderPicker=openPicker;
 })();
 </script>
 </body></html>
