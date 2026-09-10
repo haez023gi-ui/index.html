@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Habibi — Admin Paneli</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f7f5ef;color:#30271e;font-family:Arial,sans-serif}
+header{background:#fff;border-bottom:1px solid #e9e2d4;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+.logo{font-size:25px;font-weight:800} .logo span{color:#1da9a2}
+button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:pointer}
+.primary{background:#d8aa2a;color:white} .light{background:#eee9df}
+main{max-width:1100px;margin:22px auto;padding:0 16px}
+.login{max-width:430px;margin:70px auto;background:white;padding:25px;border-radius:20px;box-shadow:0 8px 35px #0000000d}
+input,select,textarea{width:100%;padding:12px;border:1px solid #ddd4c7;border-radius:10px;margin:6px 0 12px;font:inherit}
+h1,h2,h3{margin-top:0}
+.msg{min-height:20px;font-size:14px;margin-top:8px} .err{color:#b32b2b} .ok{color:#277b4b}
+#app{display:none}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.card{background:white;border:1px solid #eee5d8;border-radius:17px;padding:16px}
+.card small{color:#777} .card b{display:block;font-size:26px;margin-top:7px}
+.tabs{display:flex;gap:8px;overflow:auto;margin-bottom:14px}
+.tab{background:#eee9df;white-space:nowrap} .tab.active{background:#d8aa2a;color:white}
+.panel{background:white;border-radius:18px;padding:18px;border:1px solid #eee5d8}
+.row{border:1px solid #eee8df;border-radius:13px;padding:13px;margin:8px 0;background:#fffdf9}
+.meta{font-size:13px;color:#777;line-height:1.5;margin-top:5px}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.actions button{padding:8px 10px;background:#f0e6c3}
+.empty{padding:30px;text-align:center;color:#888}
+@media(max-width:700px){.cards{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Habibi <span>Admin</span></div>
+  <button id="logout" class="light" style="display:none">Çıkış</button>
+</header>
+
+<div id="login" class="login">
+  <h2>Admin Girişi</h2>
+  <p style="color:#777">Bu sayfa müşterilerden ve yorumcu panelinden ayrıdır.</p>
+  <input id="email" type="email" placeholder="Admin e-posta">
+  <input id="password" type="password" placeholder="Şifre">
+  <button id="loginBtn" class="primary" style="width:100%">GİRİŞ YAP</button>
+  <div id="msg" class="msg"></div>
+</div>
+
+<main id="app">
+  <h1>Yönetim Paneli</h1>
+  <div class="cards">
+    <div class="card">👥<small> Müşteri</small><b id="users">0</b></div>
+    <div class="card">🔮<small> Fal</small><b id="fortunes">0</b></div>
+    <div class="card">🪙<small> Toplam Kredi</small><b id="credits">0</b></div>
+    <div class="card">👤<small> Yorumcu</small><b id="readers">0</b></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="customers">Müşteriler</button>
+    <button class="tab" data-tab="fortunes">Gelen Fallar</button>
+    <button class="tab" data-tab="readers">Yorumcular</button>
+  </div>
+
+  <section id="customers" class="panel"><h2>Müşteriler</h2><div id="customerList"></div></section>
+  <section id="fortunes" class="panel" style="display:none"><h2>Gelen Fallar</h2><div id="fortuneList"></div></section>
+  <section id="readers" class="panel" style="display:none"><h2>Yorumcular</h2><div id="readerList"></div></section>
+</main>
+
+<script>
+const SUPABASE_URL='https://jkvcqyppotvfhrxhopdi.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable_Jn1jSTBT8Eo2FgELSuia-Q_afAKDx03';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+// Güvenlik: yalnızca profiles.role = 'admin' olan hesaplar paneli açabilir.
+async function verifyAdmin(){
+  const {data:{user}}=await sb.auth.getUser();
+  if(!user)return false;
+  const {data,error}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();
+  if(error)throw error;
+  return data && String(data.role).toLowerCase()==='admin';
+}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+
+async function load(){
+  const [u,f,r]=await Promise.all([
+    sb.from('profiles').select('id,name,email,credits,role').limit(1000),
+    sb.from('fortune_requests').select('*').order('created_at',{ascending:false}).limit(1000),
+    sb.from('reviewers').select('*').limit(1000)
+  ]);
+  if(u.error)throw u.error;
+  if(f.error)throw f.error;
+  const users=u.data||[], fortunes=f.data||[], readers=r.error?[]:(r.data||[]);
+  document.getElementById('users').textContent=users.length;
+  document.getElementById('fortunes').textContent=fortunes.length;
+  document.getElementById('credits').textContent=users.reduce((a,x)=>a+Number(x.credits||0),0).toLocaleString('tr-TR');
+  document.getElementById('readers').textContent=readers.length;
+
+  document.getElementById('customerList').innerHTML=users.length?users.map(x=>`
+    <div class="row"><b>${esc(x.name||'İsimsiz')}</b>
+    <div class="meta">${esc(x.email||'')}<br>🪙 ${Number(x.credits||0).toLocaleString('tr-TR')} kredi · Rol: ${esc(x.role||'customer')}</div>
+    <div class="actions"><button data-add="${esc(x.id)}">+300 Kredi</button><button data-sub="${esc(x.id)}">−300 Kredi</button></div></div>`).join(''):'<div class="empty">Müşteri bulunamadı.</div>';
+
+  document.getElementById('fortuneList').innerHTML=fortunes.length?fortunes.map(x=>`
+    <div class="row"><b>${esc(x.fortune_type||x.type||'Fal')}</b>
+    <div class="meta">Müşteri: ${esc(x.user_id||'')}<br>Durum: ${esc(x.status||'Bekliyor')}<br>Soru: ${esc(x.question||'')}</div></div>`).join(''):'<div class="empty">Gelen fal yok.</div>';
+
+  document.getElementById('readerList').innerHTML=readers.length?readers.map(x=>`
+    <div class="row"><b>${esc(x.name||'Yorumcu')}</b><div class="meta">${esc(x.email||x.specialty||'')}</div></div>`).join(''):'<div class="empty">Yorumcu tablosunda kayıt bulunamadı.</div>';
+}
+
+async function changeCredit(id,delta){
+  const {data,error}=await sb.from('profiles').select('credits').eq('id',id).maybeSingle();
+  if(error){alert(error.message);return}
+  const next=Math.max(0,Number(data?.credits||0)+delta);
+  const r=await sb.from('profiles').update({credits:next}).eq('id',id);
+  if(r.error)alert(r.error.message);else load();
+}
+
+document.getElementById('loginBtn').onclick=async()=>{
+  const msg=document.getElementById('msg');msg.className='msg';msg.textContent='Giriş yapılıyor...';
+  try{
+    const r=await sb.auth.signInWithPassword({email:document.getElementById('email').value.trim(),password:document.getElementById('password').value});
+    if(r.error)throw r.error;
+    if(!(await verifyAdmin())){await sb.auth.signOut();throw new Error('Bu hesap admin yetkisine sahip değil.');}
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
+    document.getElementById('logout').style.display='block';
+    msg.className='msg ok';msg.textContent='';
+    await load();
+  }catch(e){msg.className='msg err';msg.textContent=e.message||'Giriş başarısız.'}
+};
+
+document.getElementById('logout').onclick=async()=>{await sb.auth.signOut();location.reload()};
+
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  ['customers','fortunes','readers'].forEach(id=>document.getElementById(id).style.display=id===b.dataset.tab?'block':'none');
+});
+
+document.getElementById('customerList').onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.add)changeCredit(b.dataset.add,300);
+  if(b.dataset.sub)changeCredit(b.dataset.sub,-300);
+};
+
+(async()=>{
+  try{
+    if(await verifyAdmin()){
+      document.getElementById('login').style.display='none';
+      document.getElementById('app').style.display='block';
+      document.getElementById('logout').style.display='block';
+      await load();
+    }
+  }catch(e){console.warn('Admin kontrolü:',e.message)}
+})();
+</script>
+</body>
+</html>
