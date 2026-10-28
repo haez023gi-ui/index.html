@@ -3161,7 +3161,9 @@ Frontend filtresi tek başına güvenlik değildir; RLS veritabanındaki son kil
   function openFortunes(){
     const m=$('hbMyFortunesModal');
     if(!m){alert('Fallarım ekranı bulunamadı.');return;}
-    m.classList.add('show');m.style.display='flex';m.style.zIndex='10000001';
+    /* Fallarım açılırken arkada açık kalan fal metni/diğer pencereleri kapat. */
+    ['hbFortuneReadModal','hbFortuneModal','hbNewFortuneModal','hbReaderPicker','hbReadersListModal','hbReaderModal','hbCreditModal','hbPaymentModal','hbSimplePanel'].forEach(id=>{const x=$(id);if(x){x.classList.remove('show');x.style.display='none';}});
+    m.classList.add('show');m.style.display='flex';m.style.zIndex='2147483647';
     if(typeof window.hbRefreshMyFortunes==='function') window.hbRefreshMyFortunes();
   }
 
@@ -3413,4 +3415,10 @@ window.hbV8OpenOrder=render;
 })();
 </script>
 
+<style id="hb-my-fortunes-front-fix">
+/* Fallarım penceresi her şeyin üstünde kalsın; arkadaki fal metni görünmesin. */
+#hbMyFortunesModal{z-index:2147483647!important;isolation:isolate!important}
+#hbMyFortunesModal.show{display:flex!important}
+#hbMyFortunesModal .hbMyFortunesSheet{position:relative;z-index:1;background:#fff!important}
+</style>
 </body></html>
